@@ -1,18 +1,24 @@
-import ("System.Numerics")
+import("System.Numerics")
 
 -- Function to pause execution until the player is no longer zoning
 -- This prevents issues from mounting or moving while teleporting/loading
--- Remade from VAC_Functions' ZoneTransition()
+-- Remade from VAC_Functions' ZoneTransition() using condition helpers
 function WaitForZoneChange()
-    -- Wait until zoning actually starts
-    repeat Sleep(0.1) until (Svc.Condition[45] or Svc.Condition[51])
+    LogInfo("[NonuLuaLib] WaitForZoneChange() started")
 
-    -- Then wait until zoning fully completes and player is loaded
-    repeat Sleep(0.1) until (
-        not Svc.Condition[45] and 
-        not Svc.Condition[51] and 
-        Player.Available
-    )
+    -- Wait until zoning actually starts
+    LogInfo("[NonuLuaLib] Waiting for zoning to start...")
+    repeat Sleep(0.1) until (GetCharacterCondition(45) or
+        GetCharacterCondition(51))
+
+    LogInfo(
+        "[NonuLuaLib] Zoning detected! Now waiting for zoning to complete...")
+
+    -- Wait until zoning fully completes and player is loaded
+    repeat Sleep(0.1) until (not GetCharacterCondition(45) and
+        not GetCharacterCondition(51) and IsPlayerAvailable())
+
+    LogInfo("[NonuLuaLib] Zoning complete. Player is available.")
 end
 
 -- Function to sleep/wait for the specified number of seconds
@@ -23,11 +29,11 @@ function Sleep(seconds) yield('/wait ' .. tostring(seconds)) end
 -- Returns true if the addon exists and is marked as Ready
 function IsAddonReady(name)
     local addon = Addons.GetAddon(name)
-    return addon and addon.Ready
+    return addon and addon.Exists and addon.Ready
 end
 
 -- Function to pause execution until a specific addon is ready
--- Repeatedly checks readiness using isAddonReady and waits between each check
+-- Repeatedly checks readiness using IsAddonReady and waits between each check
 function WaitForAddonReady(name) repeat Sleep(0.1) until isAddonReady(name) end
 
 -- Function to perform a case-insensitive "startsWith" string comparison
@@ -56,13 +62,12 @@ function AcquireTarget(name, maxRetries, sleepTime)
     if Entity and Entity.Target and
         stringStartsWithIgnoreCase(Entity.Target.Name, name) then
         Entity.Target:SetAsTarget()
-        Dalamud.Log(string.format("[NonuLuaLib] Target acquired: %s [Word: %s]",
-                                  Entity.Target.Name, name))
+        LogInfo("[NonuLuaLib] Target acquired: %s [Word: %s]",
+                Entity.Target.Name, name)
         return true
     else
-        Dalamud.Log(string.format(
-                        "[NonuLuaLib] Failed to acquire target [%s] after %d retries",
-                        name, retries))
+        LogInfo("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
+                name, retries)
         return false
     end
 end
@@ -72,7 +77,7 @@ end
 -- Usage: Target("Aetheryte"), Target("Aetheryte", 50, 0.05)
 function Target(name, maxRetries, sleepTime)
     local success = AcquireTarget(name, maxRetries, sleepTime)
-    if not success then Dalamud.Log("[NonuLuaLib] Target() failed.") end
+    if not success then LogInfo("[NonuLuaLib] Target() failed.") end
 end
 
 -- Function to interact with a target
@@ -82,9 +87,9 @@ function Interact(name, maxRetries, sleepTime)
     local success = AcquireTarget(name, maxRetries, sleepTime)
     if success then
         yield('/interact')
-        Dalamud.Log("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
+        LogInfo("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
     else
-        Dalamud.Log("[NonuLuaLib] Interact() failed to acquire target.")
+        LogInfo("[NonuLuaLib] Interact() failed to acquire target.")
     end
 end
 
@@ -95,8 +100,7 @@ function Automove(duration, name, maxRetries, sleepTime)
     if name then
         local success = AcquireTarget(name, maxRetries, sleepTime)
         if not success then
-            Dalamud.Log("[NonuLuaLib] Automove() failed to acquire target: " ..
-                            name)
+            LogInfo("[NonuLuaLib] Automove() failed to acquire target: " .. name)
             return
         end
 
@@ -110,12 +114,10 @@ function Automove(duration, name, maxRetries, sleepTime)
     yield("/automove")
 
     if name then
-        Dalamud.Log(string.format(
-                        "[NonuLuaLib] Automoved towards target: %s for %.1f seconds",
-                        name, duration))
+        LogInfo("[NonuLuaLib] Automoved towards target: %s for %.1f seconds",
+                name, duration)
     else
-        Dalamud.Log(string.format("[NonuLuaLib] Automoved for %.1f seconds",
-                                  duration))
+        LogInfo("[NonuLuaLib] Automoved for %.1f seconds", duration)
     end
 end
 
@@ -126,7 +128,6 @@ end
 -- Usage: PathFindTo(-67.457, -0.502, -8.274)           -- Normal ground movement
 --        PathFindTo(x, y, z, true)                     -- Flying movement
 --        PathFindTo(x, y, z, false, 4.0)               -- Ground path, stop within 4.0 units
-
 function PathFindTo(x, y, z, fly, stopDistance)
     fly = fly or false
     stopDistance = stopDistance or 0.0
@@ -135,11 +136,14 @@ function PathFindTo(x, y, z, fly, stopDistance)
 
     local success = IPC.vnavmesh.PathfindAndMoveTo(destination, fly)
     if not success then
-        Dalamud.Log("[NonuLuaLib] PathfindAndMoveTo() failed to start pathing!")
+        LogInfo(
+            "[NonuLuaLib] Navmesh's PathfindAndMoveTo() failed to start pathing!")
         return false
     end
 
-    Dalamud.Log(string.format("[NonuLuaLib] Pathing issued to (%.3f, %.3f, %.3f)", x, y, z))
+    LogInfo(
+        "[NonuLuaLib] Navmesh pathing has been issued to (%.3f, %.3f, %.3f)", x,
+        y, z)
 
     local startupRetries = 0
     local maxStartupRetries = 10
@@ -149,7 +153,8 @@ function PathFindTo(x, y, z, fly, stopDistance)
     end
 
     if not IPC.vnavmesh.IsRunning() then
-        Dalamud.Log("[NonuLuaLib] Pathing failed to start movement after issuing path.")
+        LogInfo(
+            "[NonuLuaLib] Navmesh failed to start movement after creating a path.")
         return false
     end
 
@@ -162,42 +167,192 @@ function PathFindTo(x, y, z, fly, stopDistance)
             local dx = pos.X - x
             local dy = pos.Y - y
             local dz = pos.Z - z
-            local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+            local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
 
             if dist <= stopDistance then
                 IPC.vnavmesh.Stop()
-                Dalamud.Log(string.format("[NonuLuaLib] Stopped early at distance %.2f", dist))
+                LogInfo(
+                    "[NonuLuaLib] Navmesh has been stopped early at distance %.2f",
+                    dist)
                 break
             end
         end
     end
 
-    Dalamud.Log("[NonuLuaLib] Pathing complete. I'm done!")
+    LogInfo("[NonuLuaLib] Navmesh is done pathing")
     return true
 end
+
+-- Function to find nearest object by name substring (case-insensitive)
+function FindNearestObjectByName(targetName)
+    local player = Svc.ClientState.LocalPlayer
+    local closestObject = nil
+    local closestDistance = math.huge
+
+    for i = 0, Svc.Objects.Length - 1 do
+        local obj = Svc.Objects[i]
+        if obj then
+            local name = obj.Name.TextValue
+            if name and string.find(string.lower(name), string.lower(targetName)) then
+                local distance = GetDistance(obj.Position, player.Position)
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestObject = obj
+                end
+            end
+        end
+    end
+
+    if closestObject then
+        local name = closestObject.Name.TextValue
+        local pos = closestObject.Position
+        LogInfo("[NonuLuaLib] Found nearest '%s': %s (%.2f units) | XYZ: (%.3f, %.3f, %.3f)",
+            targetName, name, closestDistance, pos.X, pos.Y, pos.Z)
+    else
+        LogInfo("[NonuLuaLib] No object matching '%s' found nearby.", targetName)
+    end
+
+    return closestObject, closestDistance
+end
+
+
+
 
 -- Function to pathfind directly to an entity by name
 -- Looks up the entity, retrieves its position, and calls PathFindTo()
 -- Usage: PathToObject("Summoning Bell"), PathToObject("Retainer Vocate", false, 4.0)
-function PathToObject(entityName, fly, stopDistance)
+---  function PathToObject(entityName, fly, stopDistance)
+---     fly = fly or false
+---    stopDistance = stopDistance or 0.0
+--- 
+---     local targetEntity = Entity.GetEntityByName(entityName)
+---     if not targetEntity then
+---         LogInfo("[NonuLuaLib] Entity '%s' not found!", entityName)
+---         return false
+---     end
+--- 
+---     local pos = targetEntity.Position
+---     LogInfo("[NonuLuaLib] Pathing to entity '%s' at (%.3f, %.3f, %.3f)", entityName, pos.X, pos.Y, pos.Z)
+--- 
+---     return PathFindTo(pos.X, pos.Y, pos.Z, fly, stopDistance)
+--- end
+
+-- Function to pathfind directly to an entity by name
+-- Looks up the entity, retrieves its position, and calls PathFindTo()
+-- Usage: PathToObject("Summoning Bell"), PathToObject("Retainer Vocate", false, 4.0)
+function PathToObject(targetName, fly, stopDistance)
     fly = fly or false
     stopDistance = stopDistance or 0.0
 
-    local targetEntity = Entity.GetEntityByName(entityName)
-    if not targetEntity then
-        Dalamud.Log(string.format("[NonuLuaLib] Entity '%s' not found!", entityName))
+    local obj, dist = FindNearestObjectByName(targetName)
+    if obj then
+        local name = obj.Name.TextValue
+        local pos = obj.Position
+
+        LogInfo(
+            "[NonuLuaLib] Pathing to nearest '%s': %s (%.2f units) at (%.3f, %.3f, %.3f)", targetName, name, dist, pos.X, pos.Y, pos.Z)
+
+        return PathFindTo(pos.X, pos.Y, pos.Z, fly, stopDistance)
+    else
+        LogInfo("[NonuLuaLib] Could not find '%s' nearby.", targetName)
         return false
     end
-
-    local pos = targetEntity.Position
-    Dalamud.Log(string.format("[NonuLuaLib] Pathing to entity '%s' at (%.3f, %.3f, %.3f)", entityName, pos.X, pos.Y, pos.Z))
-
-    return PathFindTo(pos.X, pos.Y, pos.Z, fly, stopDistance)
 end
 
-
+-- =================================================================================== --
+-- =====================   UTILITIES AND SIMPLE WRAPPERS   =========================== --
+-- =================================================================================== --
 
 -- Helper to get current zone ID
-function ZoneID()
-    return Svc.ClientState.TerritoryType
+function ZoneID() return Svc.ClientState.TerritoryType end
+
+-- Player or self conditions service wrapper, use to check your conditions, usually always a number
+function GetCharacterCondition(index)
+    if index then
+        return Svc.Condition[index]
+    else
+        return Svc.Condition
+    end
 end
+
+-- Player.Available wrapper, use to check if player is available (e.g. cutscenes, loading zones.)
+function IsPlayerAvailable() return Player.Available end
+
+-- Player.Entity.IsCasting wrapper, use to check if player is casting (e.g. using spells,)
+function IsPlayerCasting() return Player.Entity and Player.Entity.IsCasting end
+
+-- Simply /echo wrapper with passage for numbers, and booleans, etc.
+function Echo(msg) yield(string.format("/echo %s", tostring(msg))) end
+
+function WaitForLifestream()
+    local hasLoggedLifestream = false
+    while IPC.Lifestream.IsBusy() do
+        if not hasLoggedLifestream then
+            LogInfo("[NonuLuaLib] Waiting for Lifestream")
+            hasLoggedLifestream = true
+        end
+        Sleep(0.1)
+    end
+    LogInfo("[NonuLuaLib] Lifestream is done")
+end
+
+-- Function for using effectively Lifestream's commands to do things, while also waiting for it to complete.
+function Lifestream(command)
+    LogInfo("[NonuLuaLib] Lifestream executing command '%s'", command)
+    IPC.Lifestream.ExecuteCommand(command)
+    WaitForLifestream()
+end
+
+-- Function for waiting for Navmesh to complete, usually called after Navmesh function, as to optimize actions during.
+function WaitForNavmesh()
+    local hasLoggedNavmesh = false
+    while IPC.vnavmesh.IsRunning() do
+        if not hasLoggedNavmesh then
+            LogInfo("[NonuLuaLib] Navmesh is running")
+            hasLoggedNavmesh = true
+        end
+        Sleep(0.1)
+    end
+    LogInfo("[NonuLuaLib] Navmesh is done")
+end
+
+-- Function to calculate distance between two positions
+function GetDistance(pos1, pos2)
+    local dx = pos1.X - pos2.X
+    local dy = pos1.Y - pos2.Y
+    local dz = pos1.Z - pos2.Z
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- =================================================================================== --
+-- =====================       DALAMUD.LOG DISPENSER       =========================== --
+-- =================================================================================== --
+
+-- Log levels defined
+local LogLevel = {Info = "Info", Debug = "Debug", Verbose = "Verbose"}
+
+-- Core log function with formatting support
+function Log(msg, level, ...)
+    level = level or LogLevel.Info
+
+    -- Auto format if additional arguments provided
+    if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
+    if level == LogLevel.Info then
+        Dalamud.Log(msg)
+    elseif level == LogLevel.Debug then
+        Dalamud.LogDebug(msg)
+    elseif level == LogLevel.Verbose then
+        Dalamud.LogVerbose(msg)
+    else
+        Dalamud.Log("[UNKNOWN LEVEL] " .. msg)
+    end
+end
+
+-- Sugar functions for easy usage
+function LogInfo(msg, ...) Log(msg, LogLevel.Info, ...) end
+
+function LogDebug(msg, ...) Log(msg, LogLevel.Debug, ...) end
+
+function LogVerbose(msg, ...) Log(msg, LogLevel.Verbose, ...) end
+

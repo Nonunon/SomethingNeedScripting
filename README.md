@@ -5,8 +5,8 @@ This repository, contains a collection of LUA functions and or scripts designed 
 
 ## Contents
 
-* `NavigateFlag.lua`: An intelligent navigation script for flying to flags with [vnavmesh](https://github.com/awgil/ffxiv_navmesh).
-* `NavigateToGridaniaGCandDeliveroo.lua`: Navigation to the Gridania Grand Company and then activates [Deliveroo](https://git.carvel.li/liza/Deliveroo).
+* `NavigateFlag.lua`: An intelligent navigation script for navigating to flags with [vnavmesh](https://github.com/awgil/ffxiv_navmesh).
+* `NavigateToGridaniaGCandDeliveroo.lua`: Navigation to the Twin Adders Grand Company and then activates [Deliveroo](https://git.carvel.li/liza/Deliveroo).
 * `NavigateToGridaniaInn.lua`: Navigation back to the New Gridania Inn.
 * `NonuLuaLib.lua`: A library of common LUA functions used throughout all my scripts.
 * `NoviceNetworkJoiner.lua`: A prospective way to brute-force entry into NoviceNetwork (used with [Chat2](https://github.com/Infiziert90/ChatTwo)).

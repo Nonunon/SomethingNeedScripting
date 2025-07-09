@@ -34,7 +34,7 @@ function Main()
     -- Finally, you're in New Gridania (132), proceed to delivery
     if currentZone == 132 then
         Movement(-67.457, -0.502, -8.274)
-        yield('/deliveroo e')
+        AutoRetainerDelivery()
     else
         yield('/echo Unexpected zone ID: ' .. tostring(currentZone))
     end

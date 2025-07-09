@@ -90,11 +90,11 @@ function AcquireTarget(name, maxRetries, sleepTime)
         StringStartsWithIgnoreCase(Entity.Target.Name, name) then
         Entity.Target:SetAsTarget()
         LogInfo("[NonuLuaLib] Target acquired: %s [Word: %s]",
-            Entity.Target.Name, name)
+                Entity.Target.Name, name)
         return true
     else
         LogInfo("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
-            name, retries)
+                name, retries)
         return false
     end
 end
@@ -165,7 +165,7 @@ function Automove(duration, name, maxRetries, sleepTime)
 
     if name then
         LogInfo("[NonuLuaLib] Automoved towards target: %s for %.1f seconds",
-            name, duration)
+                name, duration)
     else
         LogInfo("[NonuLuaLib] Automoved for %.1f seconds", duration)
     end
@@ -256,7 +256,8 @@ function FindNearestObjectByName(targetName)
         local obj = Svc.Objects[i]
         if obj then
             local name = obj.Name.TextValue
-            if name and string.find(string.lower(name), string.lower(targetName)) then
+            if name and
+                string.find(string.lower(name), string.lower(targetName)) then
                 local distance = GetDistance(obj.Position, player.Position)
                 if distance < closestDistance then
                     closestDistance = distance
@@ -269,7 +270,8 @@ function FindNearestObjectByName(targetName)
     if closestObject then
         local name = closestObject.Name.TextValue
         local pos = closestObject.Position
-        LogInfo("[NonuLuaLib] Found nearest '%s': %s (%.2f units) | XYZ: (%.3f, %.3f, %.3f)",
+        LogInfo(
+            "[NonuLuaLib] Found nearest '%s': %s (%.2f units) | XYZ: (%.3f, %.3f, %.3f)",
             targetName, name, closestDistance, pos.X, pos.Y, pos.Z)
     else
         LogInfo("[NonuLuaLib] No object matching '%s' found nearby.", targetName)
@@ -299,7 +301,8 @@ function PathToObject(targetName, fly, stopDistance)
         local pos = obj.Position
 
         LogInfo(
-            "[NonuLuaLib] Pathing to nearest '%s': %s (%.2f units) at (%.3f, %.3f, %.3f)", targetName, name, dist, pos.X, pos.Y, pos.Z)
+            "[NonuLuaLib] Pathing to nearest '%s': %s (%.2f units) at (%.3f, %.3f, %.3f)",
+            targetName, name, dist, pos.X, pos.Y, pos.Z)
 
         return Movement(pos.X, pos.Y, pos.Z, fly, stopDistance)
     else
@@ -349,13 +352,14 @@ function IsPlayerAvailable(mode)
     elseif mode == "Really" then
         -- Checks for Player.Available, NOT busy, and absence of specific character conditions.
         return Player.Available and not Player.IsBusy and
-               not GetCharacterCondition(45) and
-               not GetCharacterCondition(51) and
-               not GetCharacterCondition(33) and
-               not GetCharacterCondition(35)
+                   not GetCharacterCondition(45) and
+                   not GetCharacterCondition(51) and
+                   not GetCharacterCondition(33) and
+                   not GetCharacterCondition(35)
     else
         -- Handles an unrecognized mode, logs an error, and returns false.
-        LogInfo("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " .. tostring(mode))
+        LogInfo("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " ..
+                    tostring(mode))
         return false
     end
 end
@@ -425,6 +429,55 @@ function GetDistance(pos1, pos2)
     local dz = pos1.Z - pos2.Z
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
+
+-- Function for starting and then checking if AutoRetainer is busy during Expert Delivery continunation.
+function AutoRetainerDelivery()
+    IPC.AutoRetainer.EnqueueInitiation() -- Start the initiation process
+    LogInfo("[NonuLuaLib] AutoRetainer is starting Expert Delivery")
+    while IPC.AutoRetainer.IsBusy() do
+        Sleep(0.1) -- Loop until the AutoRetainer is no longer busy
+    end
+    LogInfo("[NonuLuaLib] AutoRetainer is done with Expert Delivery")
+end
+
+-- Sets the state of a specified Automaton tweak and confirms the change.
+-- Parameters:
+--    tweakName: The INTERNAL tweak name as found in the BundleofTweaks repo.
+--    state: Either set to `true` or `false`, if you have none set, it will toggle between true or false instead.
+-- Returns: None
+function Automaton(tweakName, state)
+    local maxAttempts = 200
+    local attempt = 0
+
+    -- Determine the target state if 'state' is not provided
+    local targetState
+    if state == nil then
+        -- If 'state' is nil (not provided), get the current state and toggle it
+        local currentState = IPC.Automaton.IsTweakEnabled(tweakName)
+        targetState = not currentState -- Toggle the current state (true becomes false, false becomes true)
+        LogInfo("[NonuLuaLib] Toggling " .. tweakName .. " from " .. tostring(currentState) .. " to " .. tostring(targetState))
+    else
+        -- If 'state' is provided, use it directly
+        targetState = state
+    end
+
+    local actual = IPC.Automaton.IsTweakEnabled(tweakName)
+
+    while actual ~= targetState and attempt < maxAttempts do
+        IPC.Automaton.SetTweakState(tweakName, targetState)
+        Sleep(0.05)
+        actual = IPC.Automaton.IsTweakEnabled(tweakName)
+        attempt = attempt + 1
+        LogInfo("[NonuLuaLib] Attempt " .. attempt .. ": " .. tweakName .. " set to " .. tostring(targetState) .. ", currently reads as " .. tostring(actual))
+    end
+
+    if actual == targetState then
+        LogInfo("[NonuLuaLib] " .. tweakName .. " successfully set to " .. tostring(targetState) .. " after " .. attempt .. " attempts.")
+    else
+        LogInfo("[NonuLuaLib] Warning: " .. tweakName .. " failed to set to " .. tostring(targetState) .. " after " .. maxAttempts .. " attempts. Current state: " .. tostring(actual))
+    end
+end
+
 
 -- =================================================================================== --
 -- =====================     MOUNTING AND NAVIGATION UTILITIES     =================== --

@@ -4,12 +4,12 @@ function Main()
     local currentZone = ZoneID()
 
     -- Handle Retainer List Closure
-    if IsAddonReady("RetainerList") then
+    if IsAddonVisible("RetainerList") then
         Sleep(0.1)
         yield("/callback RetainerList true -1 1 0")
     end
 
-    while IsAddonReady("RetainerList") do Sleep(0.1) end
+    while IsAddonVisible("RetainerList") do Sleep(0.1) end
 
     -- Handle specific zones
     if currentZone == 179 then  -- The Roost|

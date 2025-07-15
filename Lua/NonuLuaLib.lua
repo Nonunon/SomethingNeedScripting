@@ -3,32 +3,15 @@ import("System.Numerics")
 -- Constants for common game conditions
 local CONDITION_ZONING = 45 -- Zoning related condition.
 local CONDITION_ZONING_51 = 51 -- Zoning 51, No idea why it's 51.
+local CONDITION_OCCUPIED33 = 33 -- Player is occupied by something (??? There are multiple Occupied## numbers.)
+local CONDITION_OCCUPIED_BY_CUTSCENE = 35 -- Player is occupied by a cutscene they are in.
 local CONDITION_MOUNTED = 4 -- Player is considered mounted
 local CONDITION_STEALTHED = 46 -- PLayer is considered stealthed
 local CONDITION_CARRYING_OBJECT = 9 -- Player is considered holding an object.
 
--- Function to pause execution until the player is no longer zoning.
--- This prevents issues from mounting or moving while teleporting/loading.
--- Remade from VAC_Functions' ZoneTransition() using condition helpers.
--- Parameters: None
--- Returns: None
-function WaitForZoneChange()
-    LogInfo("[NonuLuaLib] WaitForZoneChange() started")
-
-    -- Wait until zoning actually starts
-    LogInfo("[NonuLuaLib] Waiting for zoning to start...")
-    repeat Sleep(0.1) until (GetCharacterCondition(CONDITION_ZONING) or
-        GetCharacterCondition(CONDITION_ZONING_51))
-
-    LogInfo(
-        "[NonuLuaLib] Zoning detected! Now waiting for zoning to complete...")
-
-    -- Wait until zoning fully completes and player is loaded
-    repeat Sleep(0.1) until (not GetCharacterCondition(CONDITION_ZONING) and
-        not GetCharacterCondition(CONDITION_ZONING_51) and IsPlayerAvailable())
-
-    LogInfo("[NonuLuaLib] Zoning complete. Player is available.")
-end
+-- =================================================================================== --
+-- =====================        UTILITIES & SIMPLE WRAPPERS        =================== --
+-- =================================================================================== --
 
 -- Function to pause script execution for a specified number of seconds.
 -- Internally uses the game's '/wait' command to maintain functionality within the game's coroutine system.
@@ -42,17 +25,96 @@ function Sleep(seconds) yield('/wait ' .. tostring(seconds)) end
 -- Parameters:
 --   name (string): The exact name of the addon to check.
 -- Returns: boolean - True if the addon is ready, false otherwise.
-function IsAddonReady(name)
+function IsAddonVisible(name)
     local addon = Addons.GetAddon(name)
     return addon and addon.Exists and addon.Ready
 end
 
 -- Function to pause execution until a specific game addon is loaded and ready.
--- Repeatedly checks readiness using IsAddonReady and waits between each check.
+-- Repeatedly checks readiness using IsAddonVisible and waits between each check.
 -- Parameters:
 --   name (string): The exact name of the addon to wait for.
 -- Returns: None
-function WaitForAddonReady(name) repeat Sleep(0.1) until IsAddonReady(name) end
+function WaitForAddonVisible(name) repeat Sleep(0.1) until IsAddonVisible(name) end
+
+-- Helper function to retrieve the current game zone ID.
+-- Parameters: None
+-- Returns: number - The current territory/zone ID.
+function ZoneID() return Svc.ClientState.TerritoryType end
+
+--- Node Text.. wooo
+function GetNodeText(addon,...)
+        return Addons.GetAddon(addon):GetNode(...).Text
+end
+
+-- Wrapper function to check player or self conditions.
+-- Can return a specific condition by index or all conditions if no index is provided.
+-- Parameters:
+--   index (number, optional): The numerical index of the character condition to check.
+-- Returns: boolean (if index provided) or table (if no index) - The state of the condition(s).
+function GetCharacterCondition(index)
+    if index then
+        return Svc.Condition[index]
+    else
+        return Svc.Condition
+    end
+end
+
+-- Function to check if the player character is currently available for actions,
+-- offering different levels of readiness checks based on the 'mode' parameter.
+-- Parameters:
+--   mode (string, optional): Specifies the type of availability check to perform.
+--     - nil (no argument provided): Returns true if Player.Available is true.
+--     - "NotBusy": Returns true if Player.Available is true AND Player.IsBusy is false.
+--     - "Really": Returns true if Player.Available is true, Player.IsBusy is false,
+--                 AND specific character conditions (45, 51, 33, 35) are NOT active.
+-- Returns: boolean - True if the player meets the specified availability criteria, false otherwise.
+function IsPlayerAvailable(mode)
+    if mode == nil then
+        -- Default behavior: Just check if the player is available in the game world.
+        return Player.Available
+    elseif mode == "NotBusy" then
+        -- Checks if the player is available and explicitly NOT busy.
+        return Player.Available and not Player.IsBusy
+    elseif mode == "Really" then
+        -- Checks for Player.Available, NOT busy, and absence of specific character conditions.
+        return Player.Available and not Player.IsBusy and
+                   not GetCharacterCondition(CONDITION_ZONING) and
+                   not GetCharacterCondition(CONDITION_ZONING_51) and
+                   not GetCharacterCondition(CONDITION_OCCUPIED33) and
+                   not GetCharacterCondition(CONDITION_OCCUPIED_BY_CUTSCENE)
+    else
+        -- Handles an unrecognized mode, logs an error, and returns false.
+        LogInfo("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " ..
+                    tostring(mode))
+        return false
+    end
+end
+
+-- Wrapper function to check if the player character is currently casting a spell or ability.
+-- Parameters: None
+-- Returns: boolean - True if the player is casting, false otherwise.
+function IsPlayerCasting() return Player.Entity and Player.Entity.IsCasting end
+
+-- Function to pause execution until the player is no longer zoning.
+-- This prevents issues from mounting or moving while teleporting/loading.
+-- Remade from VAC_Functions' ZoneTransition() using condition helpers.
+-- Parameters: None
+-- Returns: None
+function WaitForZoneChange()
+    LogInfo("[NonuLuaLib] WaitForZoneChange() started")
+
+    LogInfo("[NonuLuaLib] Waiting for zoning to start...")
+    repeat Sleep(0.1) until (GetCharacterCondition(CONDITION_ZONING) or
+        GetCharacterCondition(CONDITION_ZONING_51))
+
+    LogInfo("[NonuLuaLib] Zoning detected! Now waiting for zoning to complete...")
+
+    repeat Sleep(0.1) until (not GetCharacterCondition(CONDITION_ZONING) and
+        not GetCharacterCondition(CONDITION_ZONING_51) and IsPlayerAvailable())
+
+    LogInfo("[NonuLuaLib] Zoning complete. Player is available.")
+end
 
 -- Function to perform a case-insensitive "startsWith" string comparison.
 -- This allows for partial name matching, similar to how '/target' works in-game.
@@ -66,73 +128,165 @@ function StringStartsWithIgnoreCase(fullString, partialString)
     return string.sub(fullString, 1, #partialString) == partialString
 end
 
--- Core targeting function to attempt acquiring a target based on its name.
--- Issues the '/target' command, then waits for the client to update Entity.Target,
--- and validates if the acquired target's name matches the requested name (case-insensitive, starts with).
+
+-- =================================================================================== --
+-- =====================             LOGGING & ECHOS               =================== --
+-- =================================================================================== --
+
+-- Simple wrapper function to output a message to the in-game chat or console using the '/echo' command.
+-- Converts any input message to a string.
 -- Parameters:
---   name (string): The name or partial name of the target to acquire.
---   maxRetries (number, optional): The maximum number of times to retry acquiring the target. Defaults to 20.
---   sleepTime (number, optional): The time in seconds to wait between retries. Defaults to 0.1.
--- Returns: boolean - True if the target is successfully acquired and validated, false otherwise.
-function AcquireTarget(name, maxRetries, sleepTime)
-    maxRetries = maxRetries or 20 -- Default retries if not provided
-    sleepTime = sleepTime or 0.1 -- Default sleep interval if not provided
+--   msg (any): The message to be echoed. Can be a string, number, boolean, etc.
+-- Returns: None
+function Echo(msg) yield(string.format("/echo %s", tostring(msg))) end
 
-    yield('/target ' .. tostring(name))
+-- Table defining supported log levels for structured logging.
+local LogLevel = {Info = "Info", Debug = "Debug", Verbose = "Verbose"}
 
-    local retries = 0
-    while (Entity == nil or Entity.Target == nil) and retries < maxRetries do
-        Sleep(sleepTime)
-        retries = retries + 1
-    end
+-- Core log function for outputting messages to the Dalamud log.
+-- Supports different log levels and string formatting.
+-- Parameters:
+--   msg (string): The message string, potentially with format specifiers (e.g., "%s", "%.2f").
+--   level (string, optional): The log level (e.g., LogLevel.Info, LogLevel.Debug). Defaults to LogLevel.Info.
+--   ... (any): Additional arguments for string.format if 'msg' contains format specifiers.
+-- Returns: None
+function Log(msg, level, ...)
+    level = level or LogLevel.Info
 
-    if Entity and Entity.Target and
-        StringStartsWithIgnoreCase(Entity.Target.Name, name) then
-        Entity.Target:SetAsTarget()
-        LogInfo("[NonuLuaLib] Target acquired: %s [Word: %s]",
-                Entity.Target.Name, name)
-        return true
+    -- Auto format if additional arguments provided
+    if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
+    if level == LogLevel.Info then
+        Dalamud.Log(msg)
+    elseif level == LogLevel.Debug then
+        Dalamud.LogDebug(msg)
+    elseif level == LogLevel.Verbose then
+        Dalamud.LogVerbose(msg)
     else
-        LogInfo("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
-                name, retries)
-        return false
+        Dalamud.Log("[UNKNOWN LEVEL] " .. msg)
     end
 end
 
--- Simplified function to acquire a target using the default retry settings.
--- Calls AcquireTarget and logs a generic failure message if unsuccessful.
+-- Sugar function for logging informational messages (LogLevel.Info).
 -- Parameters:
---   name (string): The name or partial name of the target to acquire.
---   maxRetries (number, optional): See AcquireTarget.
---   sleepTime (number, optional): See AcquireTarget.
--- Returns: None (logs success/failure internally)
--- Usage:
---   Target("Aetheryte")
---   Target("Aetheryte", 50, 0.05) -- Custom retries and sleep
-function Target(name, maxRetries, sleepTime)
-    local success = AcquireTarget(name, maxRetries, sleepTime)
-    if not success then LogInfo("[NonuLuaLib] Target() failed.") end
-end
+--   msg (string): The message string, potentially with format specifiers.
+--   ... (any): Additional arguments for string.format.
+-- Returns: None
+function LogInfo(msg, ...) Log(msg, LogLevel.Info, ...) end
 
--- Function to interact with a target.
--- Attempts to acquire the target first, then issues the '/interact' command if successful.
+-- Sugar function for logging debug messages (LogLevel.Debug).
 -- Parameters:
---   name (string): The name or partial name of the target to interact with.
---   maxRetries (number, optional): See AcquireTarget.
---   sleepTime (number, optional): See AcquireTarget.
--- Returns: None (logs success/failure internally)
--- Usage:
---   Interact("Aetheryte")
---   Interact("Antoi", 30, 0.1) -- Custom retries and sleep
-function Interact(name, maxRetries, sleepTime)
-    local success = AcquireTarget(name, maxRetries, sleepTime)
-    if success then
-        yield('/interact')
-        LogInfo("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
+--   msg (string): The message string, potentially with format specifiers.
+--   ... (any): Additional arguments for string.format.
+-- Returns: None
+function LogDebug(msg, ...) Log(msg, LogLevel.Debug, ...) end
+
+-- Sugar function for logging verbose messages (LogLevel.Verbose).
+-- Parameters:
+--   msg (string): The message string, potentially with format specifiers.
+--   ... (any): Additional arguments for string.format.
+-- Returns: None
+function LogVerbose(msg, ...) Log(msg, LogLevel.Verbose, ...) end
+
+
+-- =================================================================================== --
+-- =====================              PLUGINS & IPC                =================== --
+-- =================================================================================== --
+
+-- Sets the state of a specified Automaton tweak and confirms the change.
+-- Parameters:
+--    tweakName: The INTERNAL tweak name as found in the BundleofTweaks repo.
+--    state: Either set to `true` or `false`, if you have none set, it will toggle between true or false instead.
+-- Returns: None
+function Automaton(tweakName, state)
+    local maxAttempts = 200
+    local attempt = 0
+
+    -- Determine the target state if 'state' is not provided
+    local targetState
+    if state == nil then
+        -- If 'state' is nil (not provided), get the current state and toggle it
+        local currentState = IPC.Automaton.IsTweakEnabled(tweakName)
+        targetState = not currentState -- Toggle the current state (true becomes false, false becomes true)
+        LogInfo("[NonuLuaLib] Toggling " .. tweakName .. " from " .. tostring(currentState) .. " to " .. tostring(targetState))
     else
-        LogInfo("[NonuLuaLib] Interact() failed to acquire target.")
+        -- If 'state' is provided, use it directly
+        targetState = state
+    end
+
+    local actual = IPC.Automaton.IsTweakEnabled(tweakName)
+
+    while actual ~= targetState and attempt < maxAttempts do
+        IPC.Automaton.SetTweakState(tweakName, targetState)
+        Sleep(0.05)
+        actual = IPC.Automaton.IsTweakEnabled(tweakName)
+        attempt = attempt + 1
+        LogInfo("[NonuLuaLib] Attempt " .. attempt .. ": " .. tweakName .. " set to " .. tostring(targetState) .. ", currently reads as " .. tostring(actual))
+    end
+
+    if actual == targetState then
+        LogInfo("[NonuLuaLib] " .. tweakName .. " successfully set to " .. tostring(targetState) .. " after " .. attempt .. " attempts.")
+    else
+        LogInfo("[NonuLuaLib] Warning: " .. tweakName .. " failed to set to " .. tostring(targetState) .. " after " .. maxAttempts .. " attempts. Current state: " .. tostring(actual))
     end
 end
+
+-- Function for starting and then checking if AutoRetainer is busy during Expert Delivery continunation.
+function AutoRetainerDelivery()
+    IPC.AutoRetainer.EnqueueInitiation() -- Start the initiation process
+    LogInfo("[NonuLuaLib] AutoRetainer is starting Expert Delivery")
+    while IPC.AutoRetainer.IsBusy() do
+        Sleep(0.1) -- Loop until AutoRetainer is no longer busy
+    end
+    LogInfo("[NonuLuaLib] AutoRetainer is done with Expert Delivery")
+end
+
+-- Function for waiting for vnavmesh IPC to complete its current pathing operation.
+-- This is usually called after initiating a Navmesh movement function to optimize subsequent actions.
+-- Parameters: None
+-- Returns: None
+function WaitForNavmesh()
+    local hasLoggedNavmesh = false
+    while IPC.vnavmesh.IsRunning() do
+        if not hasLoggedNavmesh then
+            LogInfo("[NonuLuaLib] Navmesh is running")
+            hasLoggedNavmesh = true
+        end
+        Sleep(0.1)
+    end
+    LogInfo("[NonuLuaLib] Navmesh is done")
+end
+
+-- Function for executing a command via Lifestream IPC and waiting for its completion.
+-- Parameters:
+--   command (string): The command string to execute through Lifestream.
+-- Returns: None
+function Lifestream(command)
+    LogInfo("[NonuLuaLib] Lifestream executing command '%s'", command)
+    IPC.Lifestream.ExecuteCommand(command)
+    WaitForLifestream()
+end
+
+-- Function to pause execution until the Lifestream IPC system indicates it is no longer busy.
+-- Lifestream is assumed to be an external plugin or system.
+-- Parameters: None
+-- Returns: None
+function WaitForLifestream()
+    local hasLoggedLifestream = false
+    while IPC.Lifestream.IsBusy() do
+        if not hasLoggedLifestream then
+            LogInfo("[NonuLuaLib] Waiting for Lifestream")
+            hasLoggedLifestream = true
+        end
+        Sleep(0.1)
+    end
+    LogInfo("[NonuLuaLib] Lifestream is done")
+end
+
+
+-- =================================================================================== --
+-- =====================               NAVIGATIONAL                =================== --
+-- =================================================================================== --
 
 -- Function to lazily automove for a specified duration, optionally towards a specific target.
 -- If a target name is provided, it will first attempt to target it, then face it,
@@ -171,7 +325,7 @@ function Automove(duration, name, maxRetries, sleepTime)
     end
 end
 
--- Function to use vnavmesh IPC (Inter-Process Communication) to pathfind and move to a 3D XYZ coordinate.
+-- Function to use vnavmesh IPC to pathfind and move to a 3D XYZ coordinate.
 -- Issues a PathfindAndMoveTo request, waits for pathing to begin, and actively monitors movement.
 -- Optionally stops early if the player reaches a specified stopDistance from the destination.
 -- Parameters:
@@ -311,113 +465,6 @@ function PathToObject(targetName, fly, stopDistance)
     end
 end
 
--- =================================================================================== --
--- =====================        UTILITIES AND SIMPLE WRAPPERS      =================== --
--- =================================================================================== --
-
--- Helper function to retrieve the current game zone ID.
--- Parameters: None
--- Returns: number - The current territory/zone ID.
-function ZoneID() return Svc.ClientState.TerritoryType end
-
--- Wrapper function to check player or self conditions.
--- Can return a specific condition by index or all conditions if no index is provided.
--- Parameters:
---   index (number, optional): The numerical index of the character condition to check.
--- Returns: boolean (if index provided) or table (if no index) - The state of the condition(s).
-function GetCharacterCondition(index)
-    if index then
-        return Svc.Condition[index]
-    else
-        return Svc.Condition
-    end
-end
-
--- Function to check if the player character is currently available for actions,
--- offering different levels of readiness checks based on the 'mode' parameter.
--- Parameters:
---   mode (string, optional): Specifies the type of availability check to perform.
---     - nil (no argument provided): Returns true if Player.Available is true.
---     - "NotBusy": Returns true if Player.Available is true AND Player.IsBusy is false.
---     - "Really": Returns true if Player.Available is true, Player.IsBusy is false,
---                 AND specific character conditions (45, 51, 33, 35) are NOT active.
--- Returns: boolean - True if the player meets the specified availability criteria, false otherwise.
-function IsPlayerAvailable(mode)
-    if mode == nil then
-        -- Default behavior: Just check if the player is available in the game world.
-        return Player.Available
-    elseif mode == "NotBusy" then
-        -- Checks if the player is available and explicitly NOT busy.
-        return Player.Available and not Player.IsBusy
-    elseif mode == "Really" then
-        -- Checks for Player.Available, NOT busy, and absence of specific character conditions.
-        return Player.Available and not Player.IsBusy and
-                   not GetCharacterCondition(45) and
-                   not GetCharacterCondition(51) and
-                   not GetCharacterCondition(33) and
-                   not GetCharacterCondition(35)
-    else
-        -- Handles an unrecognized mode, logs an error, and returns false.
-        LogInfo("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " ..
-                    tostring(mode))
-        return false
-    end
-end
-
--- Wrapper function to check if the player character is currently casting a spell or ability.
--- Parameters: None
--- Returns: boolean - True if the player is casting, false otherwise.
-function IsPlayerCasting() return Player.Entity and Player.Entity.IsCasting end
-
--- Simple wrapper function to output a message to the in-game chat or console using the '/echo' command.
--- Converts any input message to a string.
--- Parameters:
---   msg (any): The message to be echoed. Can be a string, number, boolean, etc.
--- Returns: None
-function Echo(msg) yield(string.format("/echo %s", tostring(msg))) end
-
--- Function to pause execution until the Lifestream IPC system indicates it is no longer busy.
--- Lifestream is assumed to be an external plugin or system.
--- Parameters: None
--- Returns: None
-function WaitForLifestream()
-    local hasLoggedLifestream = false
-    while IPC.Lifestream.IsBusy() do
-        if not hasLoggedLifestream then
-            LogInfo("[NonuLuaLib] Waiting for Lifestream")
-            hasLoggedLifestream = true
-        end
-        Sleep(0.1)
-    end
-    LogInfo("[NonuLuaLib] Lifestream is done")
-end
-
--- Function for executing a command via Lifestream IPC and waiting for its completion.
--- Parameters:
---   command (string): The command string to execute through Lifestream.
--- Returns: None
-function Lifestream(command)
-    LogInfo("[NonuLuaLib] Lifestream executing command '%s'", command)
-    IPC.Lifestream.ExecuteCommand(command)
-    WaitForLifestream()
-end
-
--- Function for waiting for vnavmesh IPC to complete its current pathing operation.
--- This is usually called after initiating a Navmesh movement function to optimize subsequent actions.
--- Parameters: None
--- Returns: None
-function WaitForNavmesh()
-    local hasLoggedNavmesh = false
-    while IPC.vnavmesh.IsRunning() do
-        if not hasLoggedNavmesh then
-            LogInfo("[NonuLuaLib] Navmesh is running")
-            hasLoggedNavmesh = true
-        end
-        Sleep(0.1)
-    end
-    LogInfo("[NonuLuaLib] Navmesh is done")
-end
-
 -- Function to calculate the Euclidean distance between two 3D positions (Vector3 objects).
 -- Parameters:
 --   pos1 (Vector3): The first 3D position.
@@ -430,200 +477,75 @@ function GetDistance(pos1, pos2)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
--- Function for starting and then checking if AutoRetainer is busy during Expert Delivery continunation.
-function AutoRetainerDelivery()
-    IPC.AutoRetainer.EnqueueInitiation() -- Start the initiation process
-    LogInfo("[NonuLuaLib] AutoRetainer is starting Expert Delivery")
-    while IPC.AutoRetainer.IsBusy() do
-        Sleep(0.1) -- Loop until the AutoRetainer is no longer busy
-    end
-    LogInfo("[NonuLuaLib] AutoRetainer is done with Expert Delivery")
-end
-
--- Sets the state of a specified Automaton tweak and confirms the change.
--- Parameters:
---    tweakName: The INTERNAL tweak name as found in the BundleofTweaks repo.
---    state: Either set to `true` or `false`, if you have none set, it will toggle between true or false instead.
--- Returns: None
-function Automaton(tweakName, state)
-    local maxAttempts = 200
-    local attempt = 0
-
-    -- Determine the target state if 'state' is not provided
-    local targetState
-    if state == nil then
-        -- If 'state' is nil (not provided), get the current state and toggle it
-        local currentState = IPC.Automaton.IsTweakEnabled(tweakName)
-        targetState = not currentState -- Toggle the current state (true becomes false, false becomes true)
-        LogInfo("[NonuLuaLib] Toggling " .. tweakName .. " from " .. tostring(currentState) .. " to " .. tostring(targetState))
-    else
-        -- If 'state' is provided, use it directly
-        targetState = state
-    end
-
-    local actual = IPC.Automaton.IsTweakEnabled(tweakName)
-
-    while actual ~= targetState and attempt < maxAttempts do
-        IPC.Automaton.SetTweakState(tweakName, targetState)
-        Sleep(0.05)
-        actual = IPC.Automaton.IsTweakEnabled(tweakName)
-        attempt = attempt + 1
-        LogInfo("[NonuLuaLib] Attempt " .. attempt .. ": " .. tweakName .. " set to " .. tostring(targetState) .. ", currently reads as " .. tostring(actual))
-    end
-
-    if actual == targetState then
-        LogInfo("[NonuLuaLib] " .. tweakName .. " successfully set to " .. tostring(targetState) .. " after " .. attempt .. " attempts.")
-    else
-        LogInfo("[NonuLuaLib] Warning: " .. tweakName .. " failed to set to " .. tostring(targetState) .. " after " .. maxAttempts .. " attempts. Current state: " .. tostring(actual))
-    end
-end
-
 
 -- =================================================================================== --
--- =====================     MOUNTING AND NAVIGATION UTILITIES     =================== --
+-- =====================          INTERACTION & TARGETING          =================== --
 -- =================================================================================== --
 
--- Function to issue the command to use a specific mount or Mount Roulette.
+-- Core targeting function to attempt acquiring a target based on its name.
+-- Issues the '/target' command, then waits for the client to update Entity.Target,
+-- and validates if the acquired target's name matches the requested name (case-insensitive, starts with).
 -- Parameters:
---   mountName (string, optional): The name of the mount to use. If nil or empty, Mount Roulette is used.
--- Returns: None
--- Usage:
---   _UseMount("Company Chocobo") -- Attempts to summon "Company Chocobo"
---   _UseMount()                  -- Uses Mount Roulette
-function _UseMount(mountName)
-    if mountName ~= nil and mountName ~= "" then
-        LogInfo("[NonuLuaLib] Attempting to mount: " .. mountName)
-        yield('/mount "' .. mountName .. '"') -- Use the specified mount
-    else
-        LogInfo("[NonuLuaLib] Attempting Mount Roulette")
-        yield('/gaction "Mount Roulette"') -- Use Mount Roulette
-    end
-end
+--   name (string): The name or partial name of the target to acquire.
+--   maxRetries (number, optional): The maximum number of times to retry acquiring the target. Defaults to 20.
+--   sleepTime (number, optional): The time in seconds to wait between retries. Defaults to 0.1.
+-- Returns: boolean - True if the target is successfully acquired and validated, false otherwise.
+function AcquireTarget(name, maxRetries, sleepTime)
+    maxRetries = maxRetries or 20 -- Default retries if not provided
+    sleepTime = sleepTime or 0.1 -- Default sleep interval if not provided
 
--- Function to attempt mounting with retry and timeout logic.
--- Checks if already mounted or if mounting is disallowed, then attempts to mount,
--- waits for success, and retries once after a short delay if needed.
--- Parameters:
---   mountName (string, optional): The name of the mount to use. If nil or empty, Mount Roulette is used.
---   timeout (number, optional): The maximum total time in seconds to wait for mounting to succeed. Defaults to 6.0.
---   retryAfter (number, optional): The time in seconds to wait before retrying the mount once. Defaults to 3.0.
--- Returns: boolean - True if the player successfully mounted, false otherwise.
--- Usage:
---   Mount("Fatter Cat", 8.0, 3.5) -- Tries "Fatter Cat", 8s timeout, retry after 3.5s
---   Mount()                      -- Uses Mount Roulette with default timeout/retry
-function Mount(mountName, timeout, retryAfter)
-    timeout = timeout or 6.0 -- Max total wait time for mounting (in seconds)
-    retryAfter = retryAfter or 3.0 -- Time to wait before retrying the mount once
+    yield('/target ' .. tostring(name))
 
-    -- If already mounted, skip mount logic
-    if GetCharacterCondition(CONDITION_MOUNTED) then
-        LogInfo("[NonuLuaLib] Already mounted. Skipping mount.")
-        return true
+    local retries = 0
+    while (Entity == nil or Entity.Target == nil) and retries < maxRetries do
+        Sleep(sleepTime)
+        retries = retries + 1
     end
 
-    -- If mounting is not allowed (e.g., in combat, indoors), abort
-    if not Player.CanMount then
-        LogInfo("[NonuLuaLib] Cannot mount right now. Mounting unavailable.")
-        return false
-    end
-
-    -- Attempt to mount initially
-    LogInfo("[NonuLuaLib] Attempting mount...")
-    _UseMount(mountName) -- Use the internal helper
-
-    -- Initialize mount timer and retry flag
-    local timer = 0
-    local retried = false
-
-    -- Loop until mounted or timeout is reached
-    while not GetCharacterCondition(CONDITION_MOUNTED) and timer < timeout do
-        Sleep(0.5)
-        timer = timer + 0.5
-
-        -- Retry mount once after retryAfter seconds, if still eligible
-        if timer >= retryAfter and not retried and Player.CanMount then
-            LogInfo("[NonuLuaLib] First mount attempt failed, retrying...")
-            _UseMount(mountName)
-            retried = true
-        end
-    end
-
-    -- Return whether the player successfully mounted
-    if GetCharacterCondition(CONDITION_MOUNTED) then
-        LogInfo("[NonuLuaLib] Mount succeeded.")
+    if Entity and Entity.Target and
+        StringStartsWithIgnoreCase(Entity.Target.Name, name) then
+        Entity.Target:SetAsTarget()
+        LogInfo("[NonuLuaLib] Target acquired: %s [Word: %s]",
+                Entity.Target.Name, name)
         return true
     else
-        LogInfo("[NonuLuaLib] Mount failed after timeout.")
+        LogInfo("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
+                name, retries)
         return false
     end
 end
 
--- Function to issue a /vnav command to move the player to the currently set flag.
--- This relies on the 'vnavmesh' plugin being active and having a flag set.
+-- Simplified function to acquire a target using the default retry settings.
+-- Calls AcquireTarget and logs a generic failure message if unsuccessful.
 -- Parameters:
---   useFly (boolean): True to use '/vnav flyflag', False to use '/vnav moveflag'.
--- Returns: None
+--   name (string): The name or partial name of the target to acquire.
+--   maxRetries (number, optional): See AcquireTarget.
+--   sleepTime (number, optional): See AcquireTarget.
+-- Returns: None (logs success/failure internally)
 -- Usage:
---   GoToFlag(true)  -- Uses '/vnav flyflag'
---   GoToFlag(false) -- Uses '/vnav moveflag'
-function GoToFlag(useFly)
-    if useFly then
-        yield('/vnav flyflag')
-        LogInfo("[NonuLuaLib] Issued /vnav flyflag.")
-    else
-        yield('/vnav moveflag')
-        LogInfo("[NonuLuaLib] Issued /vnav moveflag.")
-    end
+--   Target("Aetheryte")
+--   Target("Aetheryte", 50, 0.05) -- Custom retries and sleep
+function Target(name, maxRetries, sleepTime)
+    local success = AcquireTarget(name, maxRetries, sleepTime)
+    if not success then LogInfo("[NonuLuaLib] Target() failed.") end
 end
 
--- =================================================================================== --
--- =====================          DALAMUD.LOG DISPENSER          =================== --
--- =================================================================================== --
-
--- Table defining supported log levels for structured logging.
-local LogLevel = {Info = "Info", Debug = "Debug", Verbose = "Verbose"}
-
--- Core log function for outputting messages to the Dalamud log.
--- Supports different log levels and string formatting.
+-- Function to interact with a target.
+-- Attempts to acquire the target first, then issues the '/interact' command if successful.
 -- Parameters:
---   msg (string): The message string, potentially with format specifiers (e.g., "%s", "%.2f").
---   level (string, optional): The log level (e.g., LogLevel.Info, LogLevel.Debug). Defaults to LogLevel.Info.
---   ... (any): Additional arguments for string.format if 'msg' contains format specifiers.
--- Returns: None
-function Log(msg, level, ...)
-    level = level or LogLevel.Info
-
-    -- Auto format if additional arguments provided
-    if select("#", ...) > 0 then msg = string.format(msg, ...) end
-
-    if level == LogLevel.Info then
-        Dalamud.Log(msg)
-    elseif level == LogLevel.Debug then
-        Dalamud.LogDebug(msg)
-    elseif level == LogLevel.Verbose then
-        Dalamud.LogVerbose(msg)
+--   name (string): The name or partial name of the target to interact with.
+--   maxRetries (number, optional): See AcquireTarget.
+--   sleepTime (number, optional): See AcquireTarget.
+-- Returns: None (logs success/failure internally)
+-- Usage:
+--   Interact("Aetheryte")
+--   Interact("Antoi", 30, 0.1) -- Custom retries and sleep
+function Interact(name, maxRetries, sleepTime)
+    local success = AcquireTarget(name, maxRetries, sleepTime)
+    if success then
+        yield('/interact')
+        LogInfo("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
     else
-        Dalamud.Log("[UNKNOWN LEVEL] " .. msg)
+        LogInfo("[NonuLuaLib] Interact() failed to acquire target.")
     end
 end
-
--- Sugar function for logging informational messages (LogLevel.Info).
--- Parameters:
---   msg (string): The message string, potentially with format specifiers.
---   ... (any): Additional arguments for string.format.
--- Returns: None
-function LogInfo(msg, ...) Log(msg, LogLevel.Info, ...) end
-
--- Sugar function for logging debug messages (LogLevel.Debug).
--- Parameters:
---   msg (string): The message string, potentially with format specifiers.
---   ... (any): Additional arguments for string.format.
--- Returns: None
-function LogDebug(msg, ...) Log(msg, LogLevel.Debug, ...) end
-
--- Sugar function for logging verbose messages (LogLevel.Verbose).
--- Parameters:
---   msg (string): The message string, potentially with format specifiers.
---   ... (any): Additional arguments for string.format.
--- Returns: None
-function LogVerbose(msg, ...) Log(msg, LogLevel.Verbose, ...) end

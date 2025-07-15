@@ -10,7 +10,7 @@ function Chat2Toggle() yield("/xltoggleplugin Chat 2") end
 
 -- Check if we've successfully joined
 function InYet()
-    if IsAddonReady("BeginnerChatList") then
+    if IsAddonVisible("BeginnerChatList") then
         yield("/callback BeginnerChatList true -1 1 0") -- Close the Novice Network list
         return true
     end

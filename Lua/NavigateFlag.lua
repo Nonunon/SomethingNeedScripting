@@ -8,10 +8,10 @@ mount = ""
 -- Uses a named mount if provided; otherwise falls back to Mount Roulette
 function UseMount()
     if mount ~= nil and mount ~= "" then
-        LogInfo("[NonuLuaLib] Attempting to mount: " .. mount)
+        LogVerbose("[NonuLuaLib] Attempting to mount: " .. mount)
         yield('/mount "' .. mount .. '"') -- Use the specified mount
     else
-        LogInfo("[NonuLuaLib] Attempting Mount Roulette")
+        LogVerbose("[NonuLuaLib] Attempting Mount Roulette")
         yield('/gaction "Mount Roulette"') -- Use Mount Roulette
     end
 end
@@ -25,18 +25,18 @@ function Mount(timeout, retryAfter)
 
     -- If already mounted, skip mount logic
     if GetCharacterCondition(4) then
-        LogInfo("[NonuLuaLib] Already mounted. Skipping mount.")
+        LogVerbose("[NonuLuaLib] Already mounted. Skipping mount.")
         return true
     end
 
     -- If mounting is not allowed (e.g., in combat, indoors), abort
     if not Player.CanMount then
-        LogInfo("[NonuLuaLib] Cannot mount right now. Mounting unavailable.")
+        LogVerbose("[NonuLuaLib] Cannot mount right now. Mounting unavailable.")
         return false
     end
 
     -- Attempt to mount initially
-    LogInfo("[NonuLuaLib] Attempting mount...")
+    LogVerbose("[NonuLuaLib] Attempting mount...")
     UseMount()
 
     -- Initialize mount timer and retry flag
@@ -50,7 +50,7 @@ function Mount(timeout, retryAfter)
 
         -- Retry mount once after retryAfter seconds, if still eligible
         if timer >= retryAfter and not retried and Player.CanMount then
-            LogInfo("[NonuLuaLib] First mount attempt failed, retrying...")
+            LogVerbose("[NonuLuaLib] First mount attempt failed, retrying...")
             UseMount()
             retried = true
         end
@@ -58,10 +58,10 @@ function Mount(timeout, retryAfter)
 
     -- Return whether the player successfully mounted
     if GetCharacterCondition(4) then
-        LogInfo("[NonuLuaLib] Mount succeeded.")
+        LogVerbose("[NonuLuaLib] Mount succeeded.")
         return true
     else
-        LogInfo("[NonuLuaLib] Mount failed after timeout.")
+        LogVerbose("[NonuLuaLib] Mount failed after timeout.")
         return false
     end
 end
@@ -69,12 +69,12 @@ end
 -- Main navigation logic
 -- Handles zoning, state checks, mounting, and fly/ground movement commands
 function Main()
-    LogInfo("[NonuLuaLib] Starting navigation logic...")
+    LogVerbose("[NonuLuaLib] Starting navigation logic...")
 
     -- Check if the player is in stealth or carrying an object (e.g., coffer)
     -- If so, skip mounting and just walk to the flag
     if GetCharacterCondition(46) or GetCharacterCondition(9) then
-        LogInfo("[NonuLuaLib] Player is stealthed or carrying object. Skipping mount.")
+        LogVerbose("[NonuLuaLib] Player is stealthed or carrying object. Skipping mount.")
         yield('/vnav moveflag')
         return
     end
@@ -84,15 +84,15 @@ function Main()
         -- If mounted, check if flying is available
     if GetCharacterCondition(4) then
         if Player.CanFly then
-            LogInfo("[NonuLuaLib] Mounted and flying is available.")
+            LogVerbose("[NonuLuaLib] Mounted and flying is available.")
             yield('/vnav flyflag') -- Use flying navigation
         else
-            LogInfo("[NonuLuaLib] Mounted, but flying not available. Using ground movement.")
+            LogVerbose("[NonuLuaLib] Mounted, but flying not available. Using ground movement.")
             yield('/vnav moveflag') -- Use ground navigation
         end
     else
         -- If still not mounted, default to walking
-        LogInfo("[NonuLuaLib] Mount failed, defaulting to walking.")
+        LogVerbose("[NonuLuaLib] Mount failed, defaulting to walking.")
         yield('/vnav moveflag') 
     end
 end

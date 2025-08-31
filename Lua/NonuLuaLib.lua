@@ -85,7 +85,7 @@ function IsPlayerAvailable(mode)
                    not GetCharacterCondition(CONDITION_OCCUPIED_BY_CUTSCENE)
     else
         -- Handles an unrecognized mode, logs an error, and returns false.
-        LogInfo("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " ..
+        LogVerbose("[NonuLuaLib] IsPlayerAvailable called with invalid mode: " ..
                     tostring(mode))
         return false
     end
@@ -102,18 +102,18 @@ function IsPlayerCasting() return Player.Entity and Player.Entity.IsCasting end
 -- Parameters: None
 -- Returns: None
 function WaitForZoneChange()
-    LogInfo("[NonuLuaLib] WaitForZoneChange() started")
+    LogVerbose("[NonuLuaLib] WaitForZoneChange() started")
 
-    LogInfo("[NonuLuaLib] Waiting for zoning to start...")
+    LogVerbose("[NonuLuaLib] Waiting for zoning to start...")
     repeat Sleep(0.1) until (GetCharacterCondition(CONDITION_ZONING) or
         GetCharacterCondition(CONDITION_ZONING_51))
 
-    LogInfo("[NonuLuaLib] Zoning detected! Now waiting for zoning to complete...")
+    LogVerbose("[NonuLuaLib] Zoning detected! Now waiting for zoning to complete...")
 
     repeat Sleep(0.1) until (not GetCharacterCondition(CONDITION_ZONING) and
         not GetCharacterCondition(CONDITION_ZONING_51) and IsPlayerAvailable())
 
-    LogInfo("[NonuLuaLib] Zoning complete. Player is available.")
+    LogVerbose("[NonuLuaLib] Zoning complete. Player is available.")
 end
 
 -- Function to perform a case-insensitive "startsWith" string comparison.
@@ -208,7 +208,7 @@ function Automaton(tweakName, state)
         -- If 'state' is nil (not provided), get the current state and toggle it
         local currentState = IPC.Automaton.IsTweakEnabled(tweakName)
         targetState = not currentState -- Toggle the current state (true becomes false, false becomes true)
-        LogInfo("[NonuLuaLib] Toggling " .. tweakName .. " from " .. tostring(currentState) .. " to " .. tostring(targetState))
+        LogVerbose("[NonuLuaLib] Toggling " .. tweakName .. " from " .. tostring(currentState) .. " to " .. tostring(targetState))
     else
         -- If 'state' is provided, use it directly
         targetState = state
@@ -221,24 +221,24 @@ function Automaton(tweakName, state)
         Sleep(0.05)
         actual = IPC.Automaton.IsTweakEnabled(tweakName)
         attempt = attempt + 1
-        LogInfo("[NonuLuaLib] Attempt " .. attempt .. ": " .. tweakName .. " set to " .. tostring(targetState) .. ", currently reads as " .. tostring(actual))
+        LogVerbose("[NonuLuaLib] Attempt " .. attempt .. ": " .. tweakName .. " set to " .. tostring(targetState) .. ", currently reads as " .. tostring(actual))
     end
 
     if actual == targetState then
-        LogInfo("[NonuLuaLib] " .. tweakName .. " successfully set to " .. tostring(targetState) .. " after " .. attempt .. " attempts.")
+        LogVerbose("[NonuLuaLib] " .. tweakName .. " successfully set to " .. tostring(targetState) .. " after " .. attempt .. " attempts.")
     else
-        LogInfo("[NonuLuaLib] Warning: " .. tweakName .. " failed to set to " .. tostring(targetState) .. " after " .. maxAttempts .. " attempts. Current state: " .. tostring(actual))
+        LogVerbose("[NonuLuaLib] Warning: " .. tweakName .. " failed to set to " .. tostring(targetState) .. " after " .. maxAttempts .. " attempts. Current state: " .. tostring(actual))
     end
 end
 
 -- Function for starting and then checking if AutoRetainer is busy during Expert Delivery continunation.
 function AutoRetainerDelivery()
     IPC.AutoRetainer.EnqueueInitiation() -- Start the initiation process
-    LogInfo("[NonuLuaLib] AutoRetainer is starting Expert Delivery")
+    LogVerbose("[NonuLuaLib] AutoRetainer is starting Expert Delivery")
     while IPC.AutoRetainer.IsBusy() do
         Sleep(0.1) -- Loop until AutoRetainer is no longer busy
     end
-    LogInfo("[NonuLuaLib] AutoRetainer is done with Expert Delivery")
+    LogVerbose("[NonuLuaLib] AutoRetainer is done with Expert Delivery")
 end
 
 -- Function for waiting for vnavmesh IPC to complete its current pathing operation.
@@ -249,12 +249,12 @@ function WaitForNavmesh()
     local hasLoggedNavmesh = false
     while IPC.vnavmesh.IsRunning() do
         if not hasLoggedNavmesh then
-            LogInfo("[NonuLuaLib] Navmesh is running")
+            LogVerbose("[NonuLuaLib] Navmesh is running")
             hasLoggedNavmesh = true
         end
         Sleep(0.1)
     end
-    LogInfo("[NonuLuaLib] Navmesh is done")
+    LogVerbose("[NonuLuaLib] Navmesh is done")
 end
 
 -- Function for executing a command via Lifestream IPC and waiting for its completion.
@@ -262,7 +262,7 @@ end
 --   command (string): The command string to execute through Lifestream.
 -- Returns: None
 function Lifestream(command)
-    LogInfo("[NonuLuaLib] Lifestream executing command '%s'", command)
+    LogVerbose("[NonuLuaLib] Lifestream executing command '%s'", command)
     IPC.Lifestream.ExecuteCommand(command)
     WaitForLifestream()
 end
@@ -275,12 +275,12 @@ function WaitForLifestream()
     local hasLoggedLifestream = false
     while IPC.Lifestream.IsBusy() do
         if not hasLoggedLifestream then
-            LogInfo("[NonuLuaLib] Waiting for Lifestream")
+            LogVerbose("[NonuLuaLib] Waiting for Lifestream")
             hasLoggedLifestream = true
         end
         Sleep(0.1)
     end
-    LogInfo("[NonuLuaLib] Lifestream is done")
+    LogVerbose("[NonuLuaLib] Lifestream is done")
 end
 
 
@@ -304,7 +304,7 @@ function Automove(duration, name, maxRetries, sleepTime)
     if name then
         local success = AcquireTarget(name, maxRetries, sleepTime)
         if not success then
-            LogInfo("[NonuLuaLib] Automove() failed to acquire target: " .. name)
+            LogVerbose("[NonuLuaLib] Automove() failed to acquire target: " .. name)
             return
         end
 
@@ -318,10 +318,10 @@ function Automove(duration, name, maxRetries, sleepTime)
     yield("/automove") -- Stop automove
 
     if name then
-        LogInfo("[NonuLuaLib] Automoved towards target: %s for %.1f seconds",
+        LogVerbose("[NonuLuaLib] Automoved towards target: %s for %.1f seconds",
                 name, duration)
     else
-        LogInfo("[NonuLuaLib] Automoved for %.1f seconds", duration)
+        LogVerbose("[NonuLuaLib] Automoved for %.1f seconds", duration)
     end
 end
 
@@ -390,7 +390,7 @@ function Movement(x, y, z, fly, stopDistance)
         end
     end
 
-    LogInfo("[NonuLuaLib] Navmesh is done pathing")
+    LogVerbose("[NonuLuaLib] Navmesh is done pathing")
     return true
 end
 
@@ -428,7 +428,7 @@ function FindNearestObjectByName(targetName)
             "[NonuLuaLib] Found nearest '%s': %s (%.2f units) | XYZ: (%.3f, %.3f, %.3f)",
             targetName, name, closestDistance, pos.X, pos.Y, pos.Z)
     else
-        LogInfo("[NonuLuaLib] No object matching '%s' found nearby.", targetName)
+        LogVerbose("[NonuLuaLib] No object matching '%s' found nearby.", targetName)
     end
 
     return closestObject, closestDistance
@@ -460,7 +460,7 @@ function PathToObject(targetName, fly, stopDistance)
 
         return Movement(pos.X, pos.Y, pos.Z, fly, stopDistance)
     else
-        LogInfo("[NonuLuaLib] Could not find '%s' nearby.", targetName)
+        LogVerbose("[NonuLuaLib] Could not find '%s' nearby.", targetName)
         return false
     end
 end
@@ -505,11 +505,11 @@ function AcquireTarget(name, maxRetries, sleepTime)
     if Entity and Entity.Target and
         StringStartsWithIgnoreCase(Entity.Target.Name, name) then
         Entity.Target:SetAsTarget()
-        LogInfo("[NonuLuaLib] Target acquired: %s [Word: %s]",
+        LogVerbose("[NonuLuaLib] Target acquired: %s [Word: %s]",
                 Entity.Target.Name, name)
         return true
     else
-        LogInfo("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
+        LogVerbose("[NonuLuaLib] Failed to acquire target [%s] after %d retries",
                 name, retries)
         return false
     end
@@ -527,7 +527,7 @@ end
 --   Target("Aetheryte", 50, 0.05) -- Custom retries and sleep
 function Target(name, maxRetries, sleepTime)
     local success = AcquireTarget(name, maxRetries, sleepTime)
-    if not success then LogInfo("[NonuLuaLib] Target() failed.") end
+    if not success then LogVerbose("[NonuLuaLib] Target() failed.") end
 end
 
 -- Function to interact with a target.
@@ -544,8 +544,8 @@ function Interact(name, maxRetries, sleepTime)
     local success = AcquireTarget(name, maxRetries, sleepTime)
     if success then
         yield('/interact')
-        LogInfo("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
+        LogVerbose("[NonuLuaLib] Interacted with: " .. Entity.Target.Name)
     else
-        LogInfo("[NonuLuaLib] Interact() failed to acquire target.")
+        LogVerbose("[NonuLuaLib] Interact() failed to acquire target.")
     end
 end

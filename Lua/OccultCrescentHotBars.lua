@@ -15,5 +15,5 @@ local currentZone = ZoneID()
 local action = (currentZone == SPECIAL_ZONE) and "on" or "off"
 
 yield("/hotbar display " .. HOTBAR_TO_TOGGLE .. " " .. action)
-LogInfo("[NonuLuaLib] Toggled hotbar %d %s for zone %d",
+LogVerbose("[NonuLuaLib] Toggled hotbar %d %s for zone %d",
     HOTBAR_TO_TOGGLE, action, currentZone)

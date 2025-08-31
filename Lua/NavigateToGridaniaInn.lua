@@ -8,10 +8,10 @@ end
 
 function WaitForZone179()
     while ZoneID() ~= 179 do
-        LogInfo("[NonuLuaLib] Waiting for ZoneID 179")
+        LogVerbose("[NonuLuaLib] Waiting for ZoneID 179")
         Sleep(0.2)
     end
-    LogInfo("[NonuLuaLib] Arrived in ZoneID 179")
+    LogVerbose("[NonuLuaLib] Arrived in ZoneID 179")
 end
 
 function InteractWithBell()
@@ -19,12 +19,12 @@ function InteractWithBell()
 
     -- Confirm player is fully available
     while not IsPlayerAvailable() do
-        LogInfo("[NonuLuaLib] Waiting for player availability")
+        LogVerbose("[NonuLuaLib] Waiting for player availability")
         Sleep(0.1)
     end
 
     -- We only get here once IsPlayerAvailable() returned true
-    LogInfo("[NonuLuaLib] Player is now available!")
+    LogVerbose("[NonuLuaLib] Player is now available!")
 
     Sleep(0.2)
     RetainerBell()
@@ -41,13 +41,17 @@ function Main()
         return
     elseif currentZone == 132 then
         -- In New Gridania: use shortcut command to enter inn
-        Lifestream("Innnear")
+        Lifestream("innnear")
+		Target("Antoinaut")
+		Interact("Antoinaut")
         InteractWithBell()
         return
     elseif currentZone == 133 then
         -- In Old Gridania: determine closest shard and move to it
         PathToObject("Aethernet Shard", false, 3.5)
         Lifestream("innog")
+		Target("Antoinaut")
+		Interact("Antoinaut")
         InteractWithBell()
         return
     else

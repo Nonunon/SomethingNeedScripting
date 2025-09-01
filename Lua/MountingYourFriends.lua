@@ -1,6 +1,40 @@
+--[=====[
+[[SND Metadata]]
+author: Nonu
+version: 1.0.0
+description: "A silly dynamic way to mount your friends without it being totally automated."
+
+configs:
+  friendName:
+    default: FirstName LastName
+    description: Your friend's name!
+  focusRetries:
+    default: 20
+    description: How many attempts it'll try to mount your friend's mount through Focus target fuckery.
+    min: 0
+    max: 100
+  focusDelay:
+    default: 0.1
+    description: How often it'll attempt each focus retry after a decimal second delay.
+    min: 0.1
+    max: 0.5
+  targetRetries:
+    default: 20
+    description: How many attempts it'll try to mount your friend's mount through raw/hard targeting fuckery. You can set this to 0 to stop hard targeting all together.
+    min: 0
+    max: 100
+  targetDelay:
+    default: 0.1
+    description: How often it'll attempt each target retry after a decimal second delay.
+    min: 0.1
+    max: 0.5
+
+[[End Metadata]]
+--]=====]
+
 require("NonuLuaLib")
 
-local friendName = "Meow"
+local friendName = Config.Get("friendName")
 
 ---
 --- Helper: Build "Name@World" string from FocusTarget
@@ -33,10 +67,10 @@ function RidePillion()
     end
 
     -- Retry configs
-    local focusRetries  = 20
-    local focusDelay    = 0.1
-    local targetRetries = 0   -- set to 0 to fully disable <t>
-    local targetDelay   = 0.2
+    local focusRetries  = Config.Get("focusRetries")
+    local focusDelay    = Config.Get("focusDelay")
+    local targetRetries = Config.Get("targetRetries")   -- set to 0 to fully disable <t>
+    local targetDelay   = Config.Get("targetDelay")
 
     if friendName ~= "" then
         if AcquireTarget(friendName) then

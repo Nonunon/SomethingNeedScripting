@@ -7,7 +7,8 @@ This repository, contains a collection of LUA functions and or scripts designed 
 
 * `NonuLuaLib.lua`: A library of common LUA functions used throughout all my scripts. **[REQUIRED FOR MOST OF MY SCRIPTS TO WORK}**
 
-* `NExcelBodge.lua`: A very inelegant use of `Excel` to showcase how to grab a row from a sheet.
+
+* `ExcelBodge.lua`: A very inelegant use of `Excel` to showcase how to grab a row from a sheet.
 * `NavigateFlag.lua`: An intelligent navigation script for navigating to flags with [vnavmesh](https://github.com/awgil/ffxiv_navmesh).
 * `NavigateToGridaniaGCandDeliveroo.lua`: Navigation to the Twin Adders Grand Company and then activates [AutoRetainer](https://github.com/PunishXIV/AutoRetainer) turnin.
 * `NavigateToGridaniaInn.lua`: Navigation back to the New Gridania Inn with [vnavmesh](https://github.com/awgil/ffxiv_navmesh).
